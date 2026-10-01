@@ -1,0 +1,113 @@
+# Divergence Gap: corporate vs. media sentiment (FinBERT)
+# All paths are relative to the project root.
+
+universe:
+  # Large caps across sectors with dense news coverage in FNSPID.
+  tickers: [AAPL, MSFT, AMZN, GOOGL, META, NVDA, INTC, CSCO, ORCL, IBM,
+            JPM, BAC, WFC, C, GS, MS, AXP, BLK,
+            JNJ, PFE, MRK, ABBV, BMY, LLY, AMGN, GILD, UNH, CVS,
+            XOM, CVX, COP, SLB, OXY,
+            WMT, TGT, COST, HD, LOW, MCD, SBUX, NKE, KO, PEP, PG,
+            BA, CAT, GE, MMM, HON, LMT, UPS, FDX,
+            T, VZ, DIS, NFLX, CMCSA, TSLA, F, GM]
+  start: "2010-01-01"
+  end: "2023-12-31"
+  market_ticker: SPY
+  vix_ticker: "^VIX"
+
+paths:
+  data: data
+  results: results
+
+sec:
+  # SEC requires a descriptive User-Agent with a contact email.
+  user_agent: "Dev devgoad2005@gmail.com"
+  requests_per_second: 8
+  # 8-K items whose EX-99 exhibits are treated as corporate press releases:
+  # 2.02 results of operations, 7.01 Reg FD disclosure, 8.01 other events.
+  press_release_items: ["2.02", "7.01", "8.01"]
+  include_mdna: true          # also extract MD&A from 10-K / 10-Q
+  max_doc_chars: 300000
+
+news:
+  source: fnspid              # fnspid | csv
+  fnspid_url: "https://huggingface.co/datasets/Zihan1004/FNSPID/resolve/main/Stock_news/All_external.csv"
+  csv_path: null              # for source=csv: columns ticker, timestamp (UTC), text[, publisher]
+  text_field: title           # title | title_summary
+  ticker_aliases: {FB: META}  # historical symbol -> universe symbol
+  drop_roundups: true         # "Stocks moving in pre-market...", "52-week highs", etc.
+  drop_price_recaps: true     # "shares are trading higher after..." (reactive to price)
+  relevance_filter: true      # keep headlines naming the company (SEC name) or its ticker
+  name_keywords:              # overrides where the registered name is not how media say it
+    GOOGL: [alphabet, google]
+    META: [meta platforms, facebook]
+    BAC: [bank of america, bofa]
+    WFC: [wells fargo]
+    C: [citigroup, citi]
+    GS: [goldman]
+    MS: [morgan stanley]
+    AXP: [american express, amex]
+    BMY: [bristol]
+    LLY: [eli lilly, lilly]
+    UNH: [unitedhealth]
+    CVS: [cvs]
+    COP: [conocophillips]
+    SLB: [schlumberger, slb]
+    OXY: [occidental]
+    HD: [home depot]
+    LOW: [lowe's, lowes]
+    MCD: [mcdonald]
+    KO: [coca-cola, coke]
+    PG: [procter, p&g]
+    MMM: [3m]
+    LMT: [lockheed]
+    UPS: [united parcel, ups]
+    FDX: [fedex]
+    T: [at&t]
+    VZ: [verizon]
+    DIS: [disney]
+    CMCSA: [comcast]
+    F: [ford]
+    GM: [general motors, gm]
+    GE: [general electric, ge]
+    JPM: [jpmorgan, jp morgan, chase]
+    IBM: [ibm, international business machines]
+    XOM: [exxon]
+    JNJ: [johnson & johnson, j&j]
+    PEP: [pepsi]
+    WMT: [walmart, wal-mart]
+    TGT: [target corp, "target's", target inc, target stores]
+    COST: [costco]
+
+finbert:
+  model: ProsusAI/finbert
+  batch_size: 128
+  max_length: 128             # sentences / headlines; long docs are sentence-split first
+  device: auto                # auto | cuda | cpu
+  min_words: 5
+  max_words: 120
+
+panel:
+  freq: W-FRI                 # decision points: last trading day of each week
+  news_window_days: 28
+  news_halflife_days: 7
+  min_news: 3
+  corp_max_age_days: 120
+  corp_halflife_days: 45
+  corp_doc_types: [press_release, mdna_10q, mdna_10k]
+  standardize: xs             # xs (cross-sectional z) | firm (expanding within-firm z) | resid
+  min_firms_per_period: 10
+  firm_min_history: 26
+
+targets:
+  horizons: [5, 21, 63]       # trading days ahead
+  beta_window: 252
+  idio_window: 63
+  drawdown_k: 2.0             # anomalous drawdown: abnormal MDD < -k * sigma_idio * sqrt(h)
+
+analysis:
+  primary_horizon: 21
+  granger_lags: 4
+  n_permutations: 200
+  oos_first_test_year: 2015
+  seed: 7
